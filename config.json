@@ -1,0 +1,15 @@
+[
+  {
+    "isWelcome": true,
+    "keywords": ["hi", "hello", "hey", "menu", "start", "services"],
+    "type": "text",
+    "reply": "Welcome to *Zybrex*! 🚀\n\nI am an AI assistant here to help you. Zybrex is founded by *Jazi*, and we specialize in Freelancing and Online AI Masterclasses.\n\n*Our Services include:*\n🎬 Video Editing\n🎨 Graphics Designing\n🤖 AI Content Creation (AI viral videos & more)\n📈 Digital Marketing\n\nHow can we help you today? (Reply with *payment* or *price* for payment details)"
+  },
+  {
+    "isWelcome": false,
+    "keywords": ["payment", "pay", "account", "gpay", "google pay", "qr"],
+    "type": "media",
+    "reply": "*Payment Details:*\n\n*GPay Number:* 7356032512\n\nYou can also scan the attached QR code to make the payment.\n\n_(Please share a screenshot here after the payment is completed! ✅)_",
+    "mediaPath": "./qr.jpg"
+  }
+]
