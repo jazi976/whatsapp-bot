@@ -83,6 +83,23 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
                 } else if (bodyStr === '2' || bodyStr === '2️⃣') {
                     await message.reply("Sure! 😊 Jazi is a bit busy right now (probably in a small BC lol 😄). But I'm here! What do you need help with? I'll make sure Jazi sees this.\n\n_(Type *1* anytime to chat with me again)_");
                     setUserState(message.from, "WAITING_FOR_JAZI");
+                    
+                    // Alert Jazi's personal number
+                    try {
+                        const jaziNumber = '917356032512@c.us';
+                        const contact = await message.getContact();
+                        const userName = contact.pushname || message.from.split('@')[0];
+                        const alertMsg = `🚨 *URGENT ALERT* 🚨\n\nA user is waiting for you on the Business Account!\n👤 *User:* ${userName}\n📞 *Number:* +${message.from.split('@')[0]}\n\n💬 They selected the 'Personal' option. Please check your Business WhatsApp.`;
+                        
+                        // Send 3 pop-up messages as requested
+                        for (let i = 0; i < 3; i++) {
+                            await client.sendMessage(jaziNumber, alertMsg);
+                            await new Promise(res => setTimeout(res, 1000)); // 1 sec delay between alerts
+                        }
+                    } catch (err) {
+                        console.error("Failed to send alert to Jazi:", err);
+                    }
+
                 } else if (currentState === "AWAITING_OPTION") {
                     await message.reply("Please reply with exactly *1* or *2*.");
                 }
