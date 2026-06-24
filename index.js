@@ -1,7 +1,8 @@
 require('dotenv').config();
+require('dns').setServers(['8.8.8.8', '8.8.4.4']);
 const { Client, RemoteAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const { MongoStore } = require('wwebjs-mongo');
+const MongoStore = require('./CustomMongoStore');
 const mongoose = require('mongoose');
 const express = require('express');
 const ai = require('./ai');
@@ -41,6 +42,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
             backupSyncIntervalMs: 300000
         }),
         puppeteer: {
+            executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
             args: ['--no-sandbox', '--disable-setuid-sandbox'] // Required for cloud environments
         }
     });
