@@ -111,6 +111,9 @@ app.get('/', (req, res) => {
     if (latestQR) {
         res.send(`
             <html>
+                <head>
+                    <meta http-equiv="refresh" content="3">
+                </head>
                 <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f0f2f5;">
                     <h2>Zybrex Bot — WhatsApp Login</h2>
                     <p>Scan this QR Code with your WhatsApp to connect the bot.</p>
@@ -145,7 +148,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
             args: [
                 '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', 
-                '--disable-gpu', '--single-process', '--memory-pressure-off'
+                '--disable-gpu', '--memory-pressure-off'
             ]
         }
     });
