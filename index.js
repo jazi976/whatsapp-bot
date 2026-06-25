@@ -125,8 +125,11 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
             executablePath: process.platform === 'win32'
                 ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
                 : undefined,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-                   '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--disable-gpu']
+            args: [
+                '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', 
+                '--disable-gpu', '--single-process', '--memory-pressure-off'
+            ]
         }
     });
 
@@ -137,6 +140,10 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     });
     client.on('remote_session_saved', () => console.log('WhatsApp Session successfully saved to MongoDB!'));
     client.on('ready', () => console.log('Zybrex AI Bot is successfully connected and ready!'));
+    client.on('loading_screen', (percent, message) => console.log('LOADING SCREEN:', percent, message));
+    client.on('authenticated', () => console.log('AUTHENTICATED!'));
+    client.on('auth_failure', msg => console.error('AUTHENTICATION FAILURE:', msg));
+    client.on('disconnected', reason => console.log('DISCONNECTED:', reason));
 
     // ── Blue-tick tracker: when Jazi reads the alert ────────────────────────
     client.on('message_ack', async (msg, ack) => {
