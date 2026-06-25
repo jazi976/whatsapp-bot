@@ -106,14 +106,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 let latestQR = null;
+let botState = 'INITIALIZING';
 
 app.get('/', (req, res) => {
-    if (latestQR) {
+    if (botState === 'INITIALIZING') {
         res.send(`
             <html>
-                <head>
-                    <meta http-equiv="refresh" content="3">
-                </head>
+                <head><meta http-equiv="refresh" content="3"></head>
+                <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f0f2f5;">
+                    <h2>Zybrex Bot is Starting Up... ⏳</h2>
+                    <p>Please wait while WhatsApp Web loads. The QR code will appear here shortly.</p>
+                    <p><i>(This page will auto-refresh every 3 seconds)</i></p>
+                </body>
+            </html>
+        `);
+    } else if (botState === 'QR_READY' && latestQR) {
+        res.send(`
+            <html>
+                <head><meta http-equiv="refresh" content="3"></head>
                 <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f0f2f5;">
                     <h2>Zybrex Bot — WhatsApp Login</h2>
                     <p>Scan this QR Code with your WhatsApp to connect the bot.</p>
@@ -123,7 +133,14 @@ app.get('/', (req, res) => {
             </html>
         `);
     } else {
-        res.send('Zybrex AI WhatsApp Bot is running!');
+        res.send(`
+            <html>
+                <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #e6ffe6;">
+                    <h2>✅ Zybrex AI WhatsApp Bot is Running!</h2>
+                    <p>The bot is successfully connected and ready to reply to messages.</p>
+                </body>
+            </html>
+        `);
     }
 });
 app.listen(PORT, () => console.log(`Web server is listening on port ${PORT}`));
@@ -170,17 +187,20 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     client.on('qr', qr => {
         console.log('SCAN THIS QR CODE TO LOGIN TO WHATSAPP:');
         latestQR = qr;
+        botState = 'QR_READY';
         qrcode.generate(qr, { small: true });
         console.log('You can also view the QR code at: https://jazi-whatsapp-bot.onrender.com');
     });
     client.on('remote_session_saved', () => console.log('WhatsApp Session successfully saved to MongoDB!'));
     client.on('ready', () => {
         latestQR = null;
+        botState = 'READY';
         console.log('Zybrex AI Bot is successfully connected and ready!');
     });
     client.on('loading_screen', (percent, message) => console.log('LOADING SCREEN:', percent, message));
     client.on('authenticated', () => {
         latestQR = null;
+        botState = 'AUTHENTICATED';
         console.log('AUTHENTICATED!');
     });
     client.on('auth_failure', msg => console.error('AUTHENTICATION FAILURE:', msg));
