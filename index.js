@@ -143,6 +143,21 @@ app.get('/', (req, res) => {
         `);
     }
 });
+
+// Admin route to clear session and force re-login
+app.get('/clear-session', async (req, res) => {
+    try {
+        const secret = process.env.ADMIN_SECRET || 'zybrex-admin';
+        if (req.query.key !== secret) {
+            return res.status(403).send('Forbidden');
+        }
+        await mongoose.connection.db.dropDatabase();
+        res.send('Session cleared! Restart the service to get a fresh QR code.');
+    } catch (e) {
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
 app.listen(PORT, () => console.log(`Web server is listening on port ${PORT}`));
 
 // ── MongoDB + WhatsApp client ───────────────────────────────────────────────
@@ -159,26 +174,27 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     const client = new Client({
         authStrategy: new RemoteAuth({ store, backupSyncIntervalMs: 300000 }),
         puppeteer: {
+            headless: true,
             executablePath: process.platform === 'win32'
                 ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
                 : undefined,
             args: [
-                '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', 
-                '--disable-gpu', '--memory-pressure-off', '--disable-software-rasterizer',
-                '--mute-audio', '--disable-extensions', '--disable-background-networking',
-                '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
-                '--disable-breakpad', '--disable-client-side-phishing-detection',
-                '--disable-component-update', '--disable-default-apps',
-                '--disable-domain-reliability', '--disable-features=AudioServiceOutOfProcess',
-                '--disable-hang-monitor', '--disable-ipc-flooding-protection',
-                '--disable-notifications', '--disable-offer-store-unmasked-wallet-cards',
-                '--disable-popup-blocking', '--disable-print-preview',
-                '--disable-prompt-on-repost', '--disable-renderer-backgrounding',
-                '--disable-speech-api', '--disable-sync', '--hide-scrollbars',
-                '--ignore-gpu-blacklist', '--metrics-recording-only',
-                '--no-default-browser-check', '--no-pings', '--password-store=basic',
-                '--use-gl=swiftshader', '--use-mock-keychain'
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-extensions',
+                '--disable-background-networking',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--metrics-recording-only',
+                '--mute-audio',
+                '--safebrowsing-disable-auto-update',
+                '--js-flags=--max-old-space-size=256'
             ]
         }
     });
