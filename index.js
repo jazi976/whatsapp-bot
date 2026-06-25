@@ -1,3 +1,14 @@
+const fs = require('fs');
+const path = require('path');
+try {
+    const targetPath = path.join(__dirname, 'node_modules', 'whatsapp-web.js', 'src', 'Client.js');
+    const patchPath = path.join(__dirname, 'patches', 'Client.js');
+    if (fs.existsSync(targetPath) && fs.existsSync(patchPath)) {
+        fs.copyFileSync(patchPath, targetPath);
+        console.log('Successfully patched whatsapp-web.js Client.js');
+    }
+} catch (e) { console.error('Patch failed:', e); }
+
 require('dotenv').config();
 require('dns').setServers(['8.8.8.8', '8.8.4.4']);
 const { Client, RemoteAuth } = require('whatsapp-web.js');
@@ -234,7 +245,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
         }
     });
 
-    client.initialize();
+    client.initialize().catch(err => console.error("Client Init Error:", err));
 
 }).catch(err => {
     console.error('MongoDB Connection Error:', err);
