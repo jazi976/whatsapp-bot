@@ -139,8 +139,20 @@ if (!process.env.MONGODB_URI) {
     process.exit(1);
 }
 
-mongoose.connect(process.env.MONGODB_URI).then(() => {
+mongoose.connect(process.env.MONGODB_URI).then(async () => {
     console.log('Connected to MongoDB successfully!');
+
+    // ── CLEAR_SESSION environment override ─────────────────────────────────
+    if (process.env.CLEAR_SESSION === 'true') {
+        console.log('CLEAR_SESSION flag is true. Dropping WhatsApp session from database...');
+        try {
+            await mongoose.connection.db.collection('whatsapp-RemoteAuth.files').deleteMany({});
+            await mongoose.connection.db.collection('whatsapp-RemoteAuth.chunks').deleteMany({});
+            console.log('WhatsApp session collection cleared successfully!');
+        } catch (e) {
+            console.error('Failed to clear session collections:', e);
+        }
+    }
 
     const store = new MongoStore({ mongoose });
 
@@ -174,6 +186,87 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
             ]
         }
     });
+
+    // ── Memory-efficient zip/unzip overrides for RemoteAuth ────────────────
+    if (client.authStrategy) {
+        client.authStrategy.unCompressSession = async function (compressedSessionPath) {
+            const { exec } = require('child_process');
+            const fs = require('fs');
+            return new Promise((resolve, reject) => {
+                if (process.platform !== 'win32') {
+                    console.log('Decompressing session using native unzip on Linux...');
+                    exec(`unzip -o "${compressedSessionPath}" -d "${this.userDataDir}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error('Native unzip failed, falling back to JS unzipper:', stderr);
+                            fallbackUnzip(compressedSessionPath, this.userDataDir).then(resolve).catch(reject);
+                        } else {
+                            console.log('Native unzip completed successfully.');
+                            fs.unlink(compressedSessionPath, () => resolve());
+                        }
+                    });
+                } else {
+                    fallbackUnzip(compressedSessionPath, this.userDataDir).then(resolve).catch(reject);
+                }
+            });
+        };
+
+        client.authStrategy.compressSession = async function () {
+            const path = require('path');
+            const fs = require('fs-extra');
+            const { exec } = require('child_process');
+            const stageDefaultPath = path.join(this.tempDir, 'Default');
+            const userDataDefaultPath = path.join(this.userDataDir, 'Default');
+
+            await fs.emptyDir(stageDefaultPath);
+            await this.copyByRequiredDirs(userDataDefaultPath, stageDefaultPath);
+            const outPath = path.join(this.dataPath, `${this.sessionName}.zip`);
+
+            if (process.platform !== 'win32') {
+                console.log('Compressing session using native zip on Linux...');
+                return new Promise((resolve, reject) => {
+                    exec(`zip -r -q "${outPath}" .`, { cwd: this.tempDir }, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error('Native zip failed, falling back to archiver:', stderr);
+                            fallbackCompress(this.tempDir, outPath).then(resolve).catch(reject);
+                        } else {
+                            console.log('Native zip completed successfully.');
+                            resolve(outPath);
+                        }
+                    });
+                });
+            } else {
+                return fallbackCompress(this.tempDir, outPath);
+            }
+        };
+    }
+
+    async function fallbackUnzip(compressedSessionPath, userDataDir) {
+        const unzipper = require('unzipper');
+        const fs = require('fs');
+        return new Promise((resolve, reject) => {
+            fs.createReadStream(compressedSessionPath)
+                .pipe(unzipper.Extract({ path: userDataDir, concurrency: 5 }))
+                .on('error', err => reject(err))
+                .on('finish', () => fs.unlink(compressedSessionPath, () => resolve()));
+        });
+    }
+
+    async function fallbackCompress(tempDir, outPath) {
+        const archiver = require('archiver');
+        const fs = require('fs-extra');
+        const out = fs.createWriteStream(outPath);
+        const archive = archiver('zip');
+
+        return new Promise((resolve, reject) => {
+            out.once('close', () => resolve(outPath));
+            out.once('error', reject);
+            archive.once('error', reject);
+
+            archive.pipe(out);
+            archive.directory(tempDir, false);
+            archive.finalize();
+        });
+    }
 
     // ── QR / ready / session ────────────────────────────────────────────────
     client.on('qr', qr => {
