@@ -1,18 +1,19 @@
 require('dotenv').config();
 const Groq = require('groq-sdk');
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY || "DUMMY_KEY"
-});
-
-const chats = {}; 
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'DUMMY_KEY' });
 
 const systemInstruction = `
 You are June, the AI assistant of Zybrex — a digital partner brand that helps freelancers and entrepreneurs grow.
 
 Your personality:
 - Friendly, confident, professional
-- Respond in the same language the user writes (Malayalam or English). Mix both if they mix.
+- CRITICAL RULE: Always respond in the EXACT SAME language and style the user writes in.
+  - If user writes in English → reply in English
+  - If user writes in Manglish (Malayalam words in English letters) → reply in Manglish
+  - If user writes in Malayalam script → reply in Malayalam script
+  - If user mixes languages → mix the same way
+  - NEVER switch to a different language on your own
 - Never say you are ChatGPT or any other AI
 - You are June from Zybrex. That's it.
 
@@ -74,6 +75,21 @@ Skills: Ethical Hacker, Digital Marketer, Video Editor, Graphics Designer, AI Di
 For complex queries, always say: "I'll let Jazi know — he'll get back to you soon! 🙌"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONNECTING TO JAZI (VERY IMPORTANT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+If a user says anything like:
+- They urgently need to talk to Jazi
+- It's an emergency
+- They want to speak directly with Jazi
+- They say "urgent", "emergency", "immediately", "direct", "personal" in context of contacting Jazi
+- In Malayalam/Manglish: "urgent", "emergency", "jazi ye kaannam", "jazi ye connect cheyyoo", "boss ne kaannam" etc.
+
+THEN you MUST reply with EXACTLY this and nothing else:
+[CONNECT_JAZI]
+
+This is a special trigger. Do not explain. Just reply [CONNECT_JAZI] when user needs urgent Jazi connection.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Never share Jazi's personal number.
@@ -83,42 +99,69 @@ RULES
 - End complex queries with "Jazi will sort this out! 💪"
 `;
 
-async function getJuneReply(userId, message) {
+// Detect language from user message
+function detectLanguage(text) {
+    // Malayalam Unicode characters
+    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';
+
+    // Common Manglish words
+    const manglishWords = [
+        'aanu', 'ennu', 'enna', 'alle', 'undo', 'undoo', 'ayi', 'cheyyam',
+        'parayam', 'nokku', 'ingane', 'angane', 'enthu', 'evide', 'ivide',
+        'njan', 'nee', 'avan', 'aval', 'ithu', 'athu', 'cheyyan', 'kaanan',
+        'seri', 'mathi', 'venda', 'vaa', 'poda', 'okke', 'allel', 'pakshe',
+        'enikk', 'ninakk', 'namukk', 'avarku', 'tharam', 'venam', 'pora',
+        'pwoli', 'adipoli', 'sheriyaan', 'aayitt', 'aayittu', 'kanditt'
+    ];
+    const lower = text.toLowerCase();
+    const matchCount = manglishWords.filter(w => lower.includes(w)).length;
+    if (matchCount >= 2) return 'manglish';
+
+    return 'en';
+}
+
+// Get June's AI reply — accepts and returns DB-safe history
+async function getJuneReply(history, userMessage) {
     try {
-        if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'your_groq_api_key_here' || process.env.GROQ_API_KEY === 'DUMMY_KEY') {
-            return "Sorry! My AI brain is currently disconnected. (Groq API Key missing). Please contact Jazi directly!";
+        if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'DUMMY_KEY' || process.env.GROQ_API_KEY === 'your_groq_api_key_here') {
+            return { reply: "Sorry! AI disconnected. Contact Jazi directly!", history };
         }
 
-        if (!chats[userId]) {
-            chats[userId] = [
-                { role: "system", content: systemInstruction }
-            ];
+        // Build history array, always start with system message
+        let fullHistory = [];
+        if (history && history.length > 0) {
+            // Convert from DB objects to plain objects
+            fullHistory = history.map(h => ({ role: h.role, content: h.content }));
+            // Make sure system message is first
+            if (fullHistory[0]?.role !== 'system') {
+                fullHistory.unshift({ role: 'system', content: systemInstruction });
+            }
+        } else {
+            fullHistory = [{ role: 'system', content: systemInstruction }];
         }
 
-        const history = chats[userId];
-        history.push({ role: "user", content: message });
+        fullHistory.push({ role: 'user', content: userMessage });
 
         const chatCompletion = await groq.chat.completions.create({
-            messages: history,
-            model: "llama-3.3-70b-versatile",
+            messages: fullHistory,
+            model: 'llama-3.3-70b-versatile',
             temperature: 0.7,
             max_tokens: 1024,
         });
 
         const reply = chatCompletion.choices[0]?.message?.content || "Sorry, I couldn't understand that.";
-        
-        history.push({ role: "assistant", content: reply });
+        fullHistory.push({ role: 'assistant', content: reply });
 
-        // Keep history short (keep system + last 10 messages)
-        if (history.length > 11) {
-            chats[userId] = [history[0], ...history.slice(history.length - 10)];
-        }
+        // Keep history manageable: system + last 20 messages
+        const trimmed = fullHistory.length > 22
+            ? [fullHistory[0], ...fullHistory.slice(-20)]
+            : fullHistory;
 
-        return reply;
+        return { reply, history: trimmed };
     } catch (error) {
-        console.error("Groq AI Error:", error);
-        return "Sorry, I am facing a technical issue right now. Please try again later!";
+        console.error('Groq AI Error:', error);
+        return { reply: 'Sorry, facing a technical issue! Try again later.', history };
     }
 }
 
-module.exports = { getJuneReply };
+module.exports = { getJuneReply, detectLanguage };
