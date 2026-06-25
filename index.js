@@ -72,34 +72,7 @@ function getMsg(type, lang) {
     return MSGS[type]?.[lang] || MSGS[type]?.en || '';
 }
 
-// ── Alert tracker for blue-tick (read receipt) follow-up ───────────────────
-const alertTracker = new Map(); // jaziMsgId → { userPhone, timer }
 
-async function sendJaziAlertAndTrack(client, userPhone, userName, userLang) {
-    const jaziNumber = '917356032512@c.us';
-    const alertMsg = `🚨 *URGENT* 🚨\n\n*User:* ${userName}\n*Number:* +${userPhone.split('@')[0]}\n\n⚠️ They are waiting for you on Business WhatsApp RIGHT NOW!`;
-
-    let trackedMsgId = null;
-    for (let i = 0; i < 10; i++) {
-        const sent = await client.sendMessage(jaziNumber, alertMsg);
-        if (i === 0) trackedMsgId = sent.id._serialized; // track first message
-        await new Promise(res => setTimeout(res, 1000));
-    }
-
-    if (trackedMsgId) {
-        // After 3 minutes with no read → send "Jazi busy" to user
-        const timer = setTimeout(async () => {
-            if (alertTracker.has(trackedMsgId)) {
-                alertTracker.delete(trackedMsgId);
-                try {
-                    await client.sendMessage(userPhone, getMsg('jazi_busy', userLang));
-                } catch (e) { console.error('jazi_busy send error:', e); }
-            }
-        }, 3 * 60 * 1000);
-
-        alertTracker.set(trackedMsgId, { userPhone, timer });
-    }
-}
 
 // ── Express web server ──────────────────────────────────────────────────────
 const app = express();
@@ -225,22 +198,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     client.on('auth_failure', msg => console.error('AUTHENTICATION FAILURE:', msg));
     client.on('disconnected', reason => console.log('DISCONNECTED:', reason));
 
-    // ── Blue-tick tracker: when Jazi reads the alert ────────────────────────
-    client.on('message_ack', async (msg, ack) => {
-        if (ack >= 3) { // 3 = READ (blue tick)
-            const msgId = msg.id._serialized;
-            if (alertTracker.has(msgId)) {
-                const { userPhone, timer } = alertTracker.get(msgId);
-                clearTimeout(timer);
-                alertTracker.delete(msgId);
-                try {
-                    const session = await UserSession.findOne({ phoneNumber: userPhone });
-                    const lang = session?.language || 'en';
-                    await client.sendMessage(userPhone, getMsg('jazi_saw', lang));
-                } catch (e) { console.error('jazi_saw send error:', e); }
-            }
-        }
-    });
+
 
     // ── Main message handler ────────────────────────────────────────────────
     client.on('message', async (message) => {
@@ -278,15 +236,6 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
             } else if (bodyStr === '2' || bodyStr === '2️⃣') {
                 await message.reply(getMsg('jazi_wait_ack', userLang));
                 session.state = 'WAITING_FOR_JAZI';
-                await session.save();
-
-                // Send 10 alerts and track blue tick
-                try {
-                    const contact = await message.getContact();
-                    const userName = contact.pushname || userPhone.split('@')[0];
-                    await message.reply(getMsg('connecting', userLang));
-                    await sendJaziAlertAndTrack(client, userPhone, userName, userLang);
-                } catch (e) { console.error('Alert send error:', e); }
 
             } else if (currentState === 'AWAITING_OPTION') {
                 await message.reply(getMsg('invalid_option', userLang));
@@ -306,15 +255,8 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
             } else if (currentState === 'REQUESTING_JAZI') {
                 const confirmWords = ['yes', 'ha', 'haa', 'ok', 'athe', 'okay', 'seri', 'confirm', 'sheri', 'aanu'];
                 if (confirmWords.includes(bodyStr)) {
-                    await message.reply(getMsg('connecting', userLang));
+                    await message.reply(getMsg('jazi_wait_ack', userLang));
                     session.state = 'WAITING_FOR_JAZI';
-                    await session.save();
-
-                    try {
-                        const contact = await message.getContact();
-                        const userName = contact.pushname || userPhone.split('@')[0];
-                        await sendJaziAlertAndTrack(client, userPhone, userName, userLang);
-                    } catch (e) { console.error('Alert send error:', e); }
 
                 } else {
                     await message.reply(getMsg('jazi_option_change', userLang));
