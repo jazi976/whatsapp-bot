@@ -105,7 +105,24 @@ async function sendJaziAlertAndTrack(client, userPhone, userName, userLang) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (req, res) => res.send('Zybrex AI WhatsApp Bot is running!'));
+let latestQR = null;
+
+app.get('/', (req, res) => {
+    if (latestQR) {
+        res.send(`
+            <html>
+                <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f0f2f5;">
+                    <h2>Zybrex Bot — WhatsApp Login</h2>
+                    <p>Scan this QR Code with your WhatsApp to connect the bot.</p>
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(latestQR)}" alt="QR Code" style="border: 10px solid white; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+                    <p><i>The code refreshes automatically, reload this page if it fails.</i></p>
+                </body>
+            </html>
+        `);
+    } else {
+        res.send('Zybrex AI WhatsApp Bot is running!');
+    }
+});
 app.listen(PORT, () => console.log(`Web server is listening on port ${PORT}`));
 
 // ── MongoDB + WhatsApp client ───────────────────────────────────────────────
@@ -136,12 +153,20 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     // ── QR / ready / session ────────────────────────────────────────────────
     client.on('qr', qr => {
         console.log('SCAN THIS QR CODE TO LOGIN TO WHATSAPP:');
+        latestQR = qr;
         qrcode.generate(qr, { small: true });
+        console.log('You can also view the QR code at: https://jazi-whatsapp-bot.onrender.com');
     });
     client.on('remote_session_saved', () => console.log('WhatsApp Session successfully saved to MongoDB!'));
-    client.on('ready', () => console.log('Zybrex AI Bot is successfully connected and ready!'));
+    client.on('ready', () => {
+        latestQR = null;
+        console.log('Zybrex AI Bot is successfully connected and ready!');
+    });
     client.on('loading_screen', (percent, message) => console.log('LOADING SCREEN:', percent, message));
-    client.on('authenticated', () => console.log('AUTHENTICATED!'));
+    client.on('authenticated', () => {
+        latestQR = null;
+        console.log('AUTHENTICATED!');
+    });
     client.on('auth_failure', msg => console.error('AUTHENTICATION FAILURE:', msg));
     client.on('disconnected', reason => console.log('DISCONNECTED:', reason));
 
