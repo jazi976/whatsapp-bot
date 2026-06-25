@@ -16,4 +16,6 @@ RUN npm install
 
 COPY . .
 
+ENV NODE_OPTIONS="--max-old-space-size=200"
+
 CMD ["node", "index.js"]

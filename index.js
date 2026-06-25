@@ -182,7 +182,9 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
                 '--hide-scrollbars',
                 '--metrics-recording-only',
                 '--mute-audio',
-                '--safebrowsing-disable-auto-update'
+                '--safebrowsing-disable-auto-update',
+                '--disable-features=site-per-process,IsolateOrigins',
+                '--disable-site-isolation-trials'
             ]
         }
     });
