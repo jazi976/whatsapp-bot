@@ -459,10 +459,12 @@ class Client extends EventEmitter {
             // navigator.webdriver fix
             browserArgs.push('--disable-blink-features=AutomationControlled');
 
+            console.log('Launching Puppeteer browser...');
             browser = await puppeteer.launch({
                 ...puppeteerOpts,
                 args: browserArgs,
             });
+            console.log('Puppeteer browser launched successfully!');
             page = (await browser.pages())[0];
         }
 
@@ -488,6 +490,16 @@ class Client extends EventEmitter {
             }
         });
 
+        // Debugging logs from browser page
+        page.on('console', msg => {
+            const txt = msg.text();
+            if (txt.includes('Error') || txt.includes('Failed') || txt.includes('crash') || txt.includes('Warning') || txt.includes('navigator')) {
+                console.log('BROWSER LOG:', txt);
+            }
+        });
+        page.on('pageerror', err => console.error('BROWSER PAGE ERROR:', err.message));
+        page.on('error', err => console.error('BROWSER ERROR:', err));
+
         await this.authStrategy.afterBrowserInitialized();
         await this.initWebVersionCache();
 
@@ -495,11 +507,13 @@ class Client extends EventEmitter {
             await page.evaluateOnNewDocument(this.options.evalOnNewDoc);
         }
 
+        console.log('Navigating to WhatsApp Web (https://web.whatsapp.com)...');
         await page.goto(WhatsWebURL, {
             waitUntil: 'load',
             timeout: 0,
             referer: 'https://whatsapp.com/',
         });
+        console.log('Navigation to WhatsApp Web completed.');
         try {
             await this.inject();
         } catch (e) {
