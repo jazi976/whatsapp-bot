@@ -2,6 +2,7 @@ FROM node:20-slim
 
 # Install Chromium and all required system dependencies for Puppeteer
 RUN apt-get update && apt-get install -y \
+    git \
     chromium \
     libgbm-dev libasound2 libatk1.0-0 libatk-bridge2.0-0 libc6 libcairo2 libcups2 libdbus-1-3 \
     libexpat1 libfontconfig1 libgcc1 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 \
