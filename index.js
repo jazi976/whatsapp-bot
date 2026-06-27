@@ -1,30 +1,20 @@
-const fs = require('fs');
-const path = require('path');
-try {
-    const targetPath = path.join(__dirname, 'node_modules', 'whatsapp-web.js', 'src', 'Client.js');
-    const patchPath = path.join(__dirname, 'patches', 'Client.js');
-    if (fs.existsSync(targetPath) && fs.existsSync(patchPath)) {
-        fs.copyFileSync(patchPath, targetPath);
-        console.log('Successfully patched whatsapp-web.js Client.js');
-    }
-} catch (e) { console.error('Patch failed:', e); }
-
 require('dotenv').config();
 require('dns').setServers(['8.8.8.8', '8.8.4.4']);
-const { Client, RemoteAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
-const MongoStore = require('./CustomMongoStore');
-const mongoose = require('mongoose');
-const express = require('express');
-const ai = require('./ai');
-const UserSession = require('./db');
 
-// ── Language-aware message templates ───────────────────────────────────────
+const { Client, RemoteAuth } = require('whatsapp-web.js');
+const { MongoStore }         = require('wwebjs-mongo');
+const qrcode                 = require('qrcode-terminal');
+const mongoose               = require('mongoose');
+const express                = require('express');
+const ai                     = require('./ai');
+const UserSession            = require('./db');
+
+// ── Message templates (English / Manglish / Malayalam) ─────────────────────
 const MSGS = {
     welcome: {
         en:       `Hey! 👋 Welcome to Zybrex!\nI'm June, Jazi's AI assistant.\n\nPlease choose:\n1️⃣ Enquiry — Chat with June\n2️⃣ Personal — Talk directly with Jazi`,
         manglish: `Hai! 👋 Zybrex-il swagatham!\nNjan June, Jazi-nte AI assistant.\n\nThaazhe parayunnathu select cheyyuka:\n1️⃣ Enquiry — June-umayi samsaarikkam\n2️⃣ Personal — Jazi-ye direct aayi kaannam`,
-        ml:       `ഹായ്! 👋 Zybrex-ൽ സ്വാഗതം!\nഞാൻ June, Jazi-യുടെ AI assistant.\n\nചുവടെ പറയുന്നത് select ചെയ്യൂ:\n1️⃣ Enquiry — June-ഉമായി സംസാരിക്കാം\n2️⃣ Personal — Jazi-യെ direct ആയി കാണണം`,
+        ml:       `ഹായ്! 👋 Zybrex-ൽ സ്വാഗതം!\nഞാൻ June, Jazi-യുടെ AI assistant.\n\nചുവടെ select ചെയ്യൂ:\n1️⃣ Enquiry — June-ഉമായി സംസാരിക്കാം\n2️⃣ Personal — Jazi-യെ direct ആയി കാണണം`,
     },
     chat_june: {
         en:       `Great! I'm June 😊 How can I help you today?\n\n_(Type *2* anytime to reach Jazi)_`,
@@ -33,23 +23,8 @@ const MSGS = {
     },
     jazi_wait_ack: {
         en:       `Sure! 😊 Jazi is a bit busy right now. What do you need help with? I'll make sure he sees this.\n\n_(Type *1* anytime to chat with me)_`,
-        manglish: `Seri! 😊 Jazi ippol kurachu busy aanu. Enthaa help veendathu? Njan urappaayi avan-e ariyikkunnu.\n\n_(Njan-umayi samsaarikkanam enkil *1* type cheyyuka)_`,
-        ml:       `ശരി! 😊 Jazi ഇപ്പോൾ കുറച്ചു busy ആണ്. എന്താ help വേണ്ടത്? ഞാൻ ഉറപ്പായി അവനെ അറിയിക്കുന്നു.\n\n_(ഞാനുമായി സംസാരിക്കണമെങ്കിൽ *1* type ചെയ്യൂ)_`,
-    },
-    connecting: {
-        en:       `⏳ Just a second... connecting you to Jazi (Boss)!`,
-        manglish: `⏳ Oru second... Boss-ne (Jazi) connect cheyyunnu!`,
-        ml:       `⏳ ഒരു second... Boss-നെ (Jazi) connect ചെയ്യുന്നു!`,
-    },
-    jazi_saw: {
-        en:       `✅ Jazi has seen the message! He'll get back to you very soon! 🙌`,
-        manglish: `✅ Jazi message kandu! Avan ippol varum! 🙌`,
-        ml:       `✅ Jazi message കണ്ടു! അവൻ ഇപ്പോൾ വരും! 🙌`,
-    },
-    jazi_busy: {
-        en:       `⏰ Jazi seems to be in something urgent right now. But I've sent the message — he'll reply as soon as he's free! 💪`,
-        manglish: `⏰ Jazi ippol vere urgent pani-il aayirikkum. Pakshe message ayachirunnu — free aakumbol undaam varum! 💪`,
-        ml:       `⏰ Jazi ഇപ്പോൾ വേറെ urgent പണിയിൽ ആയിരിക്കും. പക്ഷേ message അയച്ചിരുന്നു — free ആകുമ്പോൾ ഉടനേ വരും! 💪`,
+        manglish: `Seri! 😊 Jazi ippol busy aanu. Enthaa help veendathu? Njan urappaayi avan-e ariyikkunnu.\n\n_(Njan-umayi samsaarikkanam enkil *1* type cheyyuka)_`,
+        ml:       `ശരി! 😊 Jazi ഇപ്പോൾ busy ആണ്. എന്താ help വേണ്ടത്? ഞാൻ ഉറപ്പായി അവനെ അറിയിക്കുന്നു.\n\n_(ഞാനുമായി സംസാരിക്കണമെങ്കിൽ *1* type ചെയ്യൂ)_`,
     },
     connect_confirm: {
         en:       `🔗 Want me to connect you to Jazi (Boss) urgently?\n\nReply *Yes* to confirm!`,
@@ -72,10 +47,8 @@ function getMsg(type, lang) {
     return MSGS[type]?.[lang] || MSGS[type]?.en || '';
 }
 
-
-
 // ── Express web server ──────────────────────────────────────────────────────
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
 let latestQR = null;
@@ -83,47 +56,49 @@ let botState = 'INITIALIZING';
 
 app.get('/', (req, res) => {
     if (botState === 'INITIALIZING') {
-        res.send(`
+        return res.send(`
             <html>
                 <head><meta http-equiv="refresh" content="3"></head>
-                <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f0f2f5;">
+                <body style="font-family:sans-serif;text-align:center;margin-top:80px;background:#f0f2f5">
                     <h2>Zybrex Bot is Starting Up... ⏳</h2>
                     <p>Please wait while WhatsApp Web loads. The QR code will appear here shortly.</p>
                     <p><i>(This page will auto-refresh every 3 seconds)</i></p>
                 </body>
             </html>
         `);
-    } else if (botState === 'QR_READY' && latestQR) {
-        res.send(`
+    }
+
+    if (botState === 'QR_READY' && latestQR) {
+        return res.send(`
             <html>
-                <head><meta http-equiv="refresh" content="3"></head>
-                <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f0f2f5;">
+                <head><meta http-equiv="refresh" content="30"></head>
+                <body style="font-family:sans-serif;text-align:center;margin-top:50px;background:#f0f2f5">
                     <h2>Zybrex Bot — WhatsApp Login</h2>
                     <p>Scan this QR Code with your WhatsApp to connect the bot.</p>
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(latestQR)}" alt="QR Code" style="border: 10px solid white; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
-                    <p><i>The code refreshes automatically, reload this page if it fails.</i></p>
-                </body>
-            </html>
-        `);
-    } else {
-        res.send(`
-            <html>
-                <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #e6ffe6;">
-                    <h2>✅ Zybrex AI WhatsApp Bot is Running!</h2>
-                    <p>The bot is successfully connected and ready to reply to messages.</p>
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(latestQR)}"
+                         alt="QR Code"
+                         style="border:10px solid white;border-radius:10px;box-shadow:0 4px 8px rgba(0,0,0,0.1)"/>
+                    <p><i>Reload this page if the QR code stops working.</i></p>
                 </body>
             </html>
         `);
     }
+
+    return res.send(`
+        <html>
+            <body style="font-family:sans-serif;text-align:center;margin-top:80px;background:#e6ffe6">
+                <h2>✅ Zybrex AI WhatsApp Bot is Running!</h2>
+                <p>The bot is successfully connected and ready to reply to messages.</p>
+            </body>
+        </html>
+    `);
 });
 
-// Admin route to clear session and force re-login
+// Admin route — clear session and force fresh QR scan
 app.get('/clear-session', async (req, res) => {
+    const secret = process.env.ADMIN_SECRET || 'zybrex-admin';
+    if (req.query.key !== secret) return res.status(403).send('Forbidden');
     try {
-        const secret = process.env.ADMIN_SECRET || 'zybrex-admin';
-        if (req.query.key !== secret) {
-            return res.status(403).send('Forbidden');
-        }
         await mongoose.connection.db.dropDatabase();
         res.send('Session cleared! Restart the service to get a fresh QR code.');
     } catch (e) {
@@ -131,38 +106,37 @@ app.get('/clear-session', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Web server is listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
-// ── MongoDB + WhatsApp client ───────────────────────────────────────────────
+// ── MongoDB connection ──────────────────────────────────────────────────────
 if (!process.env.MONGODB_URI) {
-    console.error('CRITICAL ERROR: MONGODB_URI is not set in .env!');
+    console.error('CRITICAL ERROR: MONGODB_URI environment variable is not set!');
     process.exit(1);
 }
 
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
     console.log('Connected to MongoDB successfully!');
 
-    // ── CLEAR_SESSION environment override ─────────────────────────────────
+    // Clear WhatsApp session if CLEAR_SESSION=true (set in Render env vars)
     if (process.env.CLEAR_SESSION === 'true') {
-        console.log('CLEAR_SESSION flag is true. Dropping WhatsApp session from database...');
+        console.log('CLEAR_SESSION=true — clearing WhatsApp session from MongoDB...');
         try {
             await mongoose.connection.db.collection('whatsapp-RemoteAuth.files').deleteMany({});
             await mongoose.connection.db.collection('whatsapp-RemoteAuth.chunks').deleteMany({});
-            console.log('WhatsApp session collection cleared successfully!');
+            console.log('WhatsApp session cleared successfully!');
         } catch (e) {
-            console.error('Failed to clear session collections:', e);
+            console.error('Error clearing session:', e);
         }
     }
 
     const store = new MongoStore({ mongoose });
 
+    // ── WhatsApp Client ─────────────────────────────────────────────────────
     const client = new Client({
-        authStrategy: new RemoteAuth({ store, backupSyncIntervalMs: 300000 }),
-        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        webVersionCache: {
-            type: 'remote',
-            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html'
-        },
+        authStrategy: new RemoteAuth({
+            store,
+            backupSyncIntervalMs: 60000, // Save session every 1 minute
+        }),
         puppeteer: {
             headless: true,
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
@@ -176,150 +150,74 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
                 '--disable-gpu',
                 '--no-first-run',
                 '--disable-extensions',
-                '--disable-background-networking',
-                '--disable-sync',
-                '--disable-translate',
-                '--hide-scrollbars',
-                '--metrics-recording-only',
-                '--mute-audio',
-                '--safebrowsing-disable-auto-update',
-                '--disable-features=site-per-process,IsolateOrigins',
-                '--disable-site-isolation-trials'
-            ]
-        }
+            ],
+        },
     });
 
-    // ── Memory-efficient zip/unzip overrides for RemoteAuth ────────────────
-    if (client.authStrategy) {
-        client.authStrategy.unCompressSession = async function (compressedSessionPath) {
-            const { exec } = require('child_process');
-            const fs = require('fs');
-            return new Promise((resolve, reject) => {
-                if (process.platform !== 'win32') {
-                    console.log('Decompressing session using native unzip on Linux...');
-                    exec(`unzip -o "${compressedSessionPath}" -d "${this.userDataDir}"`, (err, stdout, stderr) => {
-                        if (err) {
-                            console.error('Native unzip failed, falling back to JS unzipper:', stderr);
-                            fallbackUnzip(compressedSessionPath, this.userDataDir).then(resolve).catch(reject);
-                        } else {
-                            console.log('Native unzip completed successfully.');
-                            fs.unlink(compressedSessionPath, () => resolve());
-                        }
-                    });
-                } else {
-                    fallbackUnzip(compressedSessionPath, this.userDataDir).then(resolve).catch(reject);
-                }
-            });
-        };
-
-        client.authStrategy.compressSession = async function () {
-            const path = require('path');
-            const fs = require('fs-extra');
-            const { exec } = require('child_process');
-            const stageDefaultPath = path.join(this.tempDir, 'Default');
-            const userDataDefaultPath = path.join(this.userDataDir, 'Default');
-
-            await fs.emptyDir(stageDefaultPath);
-            await this.copyByRequiredDirs(userDataDefaultPath, stageDefaultPath);
-            const outPath = path.join(this.dataPath, `${this.sessionName}.zip`);
-
-            if (process.platform !== 'win32') {
-                console.log('Compressing session using native zip on Linux...');
-                return new Promise((resolve, reject) => {
-                    exec(`zip -r -q "${outPath}" .`, { cwd: this.tempDir }, (err, stdout, stderr) => {
-                        if (err) {
-                            console.error('Native zip failed, falling back to archiver:', stderr);
-                            fallbackCompress(this.tempDir, outPath).then(resolve).catch(reject);
-                        } else {
-                            console.log('Native zip completed successfully.');
-                            resolve(outPath);
-                        }
-                    });
-                });
-            } else {
-                return fallbackCompress(this.tempDir, outPath);
-            }
-        };
-    }
-
-    async function fallbackUnzip(compressedSessionPath, userDataDir) {
-        const unzipper = require('unzipper');
-        const fs = require('fs');
-        return new Promise((resolve, reject) => {
-            fs.createReadStream(compressedSessionPath)
-                .pipe(unzipper.Extract({ path: userDataDir, concurrency: 5 }))
-                .on('error', err => reject(err))
-                .on('finish', () => fs.unlink(compressedSessionPath, () => resolve()));
-        });
-    }
-
-    async function fallbackCompress(tempDir, outPath) {
-        const archiver = require('archiver');
-        const fs = require('fs-extra');
-        const out = fs.createWriteStream(outPath);
-        const archive = archiver('zip');
-
-        return new Promise((resolve, reject) => {
-            out.once('close', () => resolve(outPath));
-            out.once('error', reject);
-            archive.once('error', reject);
-
-            archive.pipe(out);
-            archive.directory(tempDir, false);
-            archive.finalize();
-        });
-    }
-
-    // ── QR / ready / session ────────────────────────────────────────────────
+    // ── WhatsApp Events ─────────────────────────────────────────────────────
     client.on('qr', qr => {
-        console.log('SCAN THIS QR CODE TO LOGIN TO WHATSAPP:');
+        console.log('QR Code generated — visit the URL to scan:');
         latestQR = qr;
         botState = 'QR_READY';
         qrcode.generate(qr, { small: true });
-        console.log('You can also view the QR code at: https://jazi-whatsapp-bot.onrender.com');
     });
-    client.on('remote_session_saved', () => console.log('WhatsApp Session successfully saved to MongoDB!'));
-    client.on('ready', () => {
-        latestQR = null;
-        botState = 'READY';
-        console.log('Zybrex AI Bot is successfully connected and ready!');
-    });
-    client.on('loading_screen', (percent, message) => console.log('LOADING SCREEN:', percent, message));
+
     client.on('authenticated', () => {
+        console.log('AUTHENTICATED! WhatsApp login successful.');
         latestQR = null;
         botState = 'AUTHENTICATED';
-        console.log('AUTHENTICATED!');
     });
-    client.on('auth_failure', msg => console.error('AUTHENTICATION FAILURE:', msg));
-    client.on('disconnected', reason => console.log('DISCONNECTED:', reason));
 
+    client.on('ready', () => {
+        console.log('✅ Zybrex AI Bot is READY and listening for messages!');
+        botState = 'READY';
+    });
 
+    client.on('remote_session_saved', () => {
+        console.log('✅ WhatsApp session saved to MongoDB successfully!');
+    });
 
-    // ── Main message handler ────────────────────────────────────────────────
+    client.on('auth_failure', msg => {
+        console.error('Authentication failure:', msg);
+        botState = 'INITIALIZING';
+    });
+
+    client.on('disconnected', reason => {
+        console.log('Bot disconnected:', reason);
+        botState = 'INITIALIZING';
+    });
+
+    client.on('loading_screen', (percent, message) => {
+        console.log(`Loading WhatsApp Web: ${percent}% — ${message}`);
+    });
+
+    // ── Message Handler ─────────────────────────────────────────────────────
     client.on('message', async (message) => {
         if (message.from === 'status@broadcast') return;
 
         try {
             const chat = await message.getChat();
-            if (chat.isGroup) return;
+            if (chat.isGroup) return; // Ignore group messages
 
-            const userPhone = message.from;
-            const bodyStr = message.body.trim().toLowerCase();
-            const lang = ai.detectLanguage(message.body);
+            const userPhone  = message.from;
+            const bodyStr    = message.body.trim().toLowerCase();
+            const lang       = ai.detectLanguage(message.body);
 
-            // Get or create session from DB
+            // Load or create user session from MongoDB
             let session = await UserSession.findOne({ phoneNumber: userPhone });
             if (!session) {
                 session = new UserSession({ phoneNumber: userPhone });
             }
+
             // Update language (non-English takes priority)
             if (lang !== 'en' || session.language === 'en') {
                 session.language = lang;
             }
-            const userLang = session.language;
+
+            const userLang     = session.language;
             const currentState = session.state;
 
-            // ── State machine ──────────────────────────────────────────────
+            // ── State Machine ───────────────────────────────────────────────
             if (currentState === 'NEW') {
                 await message.reply(getMsg('welcome', userLang));
                 session.state = 'AWAITING_OPTION';
@@ -352,14 +250,13 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
                 if (confirmWords.includes(bodyStr)) {
                     await message.reply(getMsg('jazi_wait_ack', userLang));
                     session.state = 'WAITING_FOR_JAZI';
-
                 } else {
                     await message.reply(getMsg('jazi_option_change', userLang));
                     session.state = 'AWAITING_OPTION';
                 }
 
             } else if (currentState === 'WAITING_FOR_JAZI') {
-                // Jazi handles this directly — stay silent
+                // Jazi handles this directly — bot stays silent
             }
 
             await session.save();
@@ -369,8 +266,10 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
         }
     });
 
-    client.initialize().catch(err => console.error("Client Init Error:", err));
+    // Start the WhatsApp client
+    client.initialize().catch(err => console.error('Client initialization error:', err));
 
 }).catch(err => {
-    console.error('MongoDB Connection Error:', err);
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
 });
