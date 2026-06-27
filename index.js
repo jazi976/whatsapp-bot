@@ -158,23 +158,23 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 
     const client = new Client({
         authStrategy: new RemoteAuth({ store, backupSyncIntervalMs: 300000 }),
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
         webVersionCache: {
             type: 'remote',
             remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html'
         },
         puppeteer: {
             headless: true,
-            executablePath: process.platform === 'win32'
-                ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-                : undefined,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
+                (process.platform === 'win32'
+                    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+                    : undefined),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--no-first-run',
-                '--no-zygote',
                 '--disable-extensions',
                 '--disable-background-networking',
                 '--disable-sync',
@@ -184,7 +184,8 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
                 '--mute-audio',
                 '--safebrowsing-disable-auto-update',
                 '--disable-features=site-per-process,IsolateOrigins',
-                '--disable-site-isolation-trials'
+                '--disable-site-isolation-trials',
+                '--single-process'
             ]
         }
     });
