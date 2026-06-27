@@ -184,8 +184,7 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
                 '--mute-audio',
                 '--safebrowsing-disable-auto-update',
                 '--disable-features=site-per-process,IsolateOrigins',
-                '--disable-site-isolation-trials',
-                '--single-process'
+                '--disable-site-isolation-trials'
             ]
         }
     });

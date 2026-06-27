@@ -479,18 +479,6 @@ class Client extends EventEmitter {
         this.pupBrowser = browser;
         this.pupPage = page;
 
-        // Memory optimization: Intercept and block only truly unnecessary binary media
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            const resourceType = req.resourceType();
-            // Only block large binary resources; stylesheets & fonts are required for WhatsApp Web to work
-            if (['image', 'media'].includes(resourceType)) {
-                req.abort();
-            } else {
-                req.continue();
-            }
-        });
-
         // Debugging logs from browser page
         page.on('console', msg => {
             const txt = msg.text();
